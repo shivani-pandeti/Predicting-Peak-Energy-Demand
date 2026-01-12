@@ -1,0 +1,580 @@
+```{r}
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(caret)
+library(randomForest)
+library(xgboost)
+library(arrow)
+library(shiny)
+library(readr)
+library(httr)
+library(lubridate) 
+```
+```{r}
+static_data_url <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/static_house_info.parquet"
+
+# Read and filter static house data
+static_data <- read_parquet(static_data_url) %>%
+  select(bldg_id, in.sqft, in.county)
+
+# Preview the static data
+head(static_data)
+```
+```{r}
+# Generate URLs for energy files
+energy_directory <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/2023-houseData/"
+energy_files <- paste0(energy_directory, static_data$bldg_id, ".parquet")
+```
+
+```{r}
+read_energy_file <- function(file_url, bldg_id) {
+  tryCatch({
+    # Read the parquet file
+    energy_data <- read_parquet(file_url)
+    
+    # Add the bldg_id as a new column
+    energy_data <- energy_data %>%
+      mutate(bldg_id = bldg_id)
+    
+    # Dynamically identify all columns that start with "out.electricity."
+    electricity_columns <- names(energy_data)[grepl("^out\\.electricity\\.", names(energy_data))]
+    
+    # Filter for July based on the 'time' column (POSIXct)
+    filtered_data <- energy_data %>%
+      filter(month(time) == 7) %>% # Use lubridate's month() function
+      select(c("bldg_id", "time", all_of(electricity_columns))) # Select relevant columns
+    
+    return(filtered_data)
+  }, error = function(e) {
+    message(paste("Error reading file:", file_url, ":", e$message))
+    return(NULL)
+  })
+}
+```
+
+```{r}
+# Combine July data, passing both file URLs and building IDs
+energy_merged_data <- rbindlist(
+  mapply(read_energy_file, energy_files, static_data$bldg_id, SIMPLIFY = FALSE),
+  fill = TRUE
+)
+```
+
+```{r}
+energy_merged_data <- energy_merged_data %>%
+  mutate(
+    # Extract date and time from the 'time' column
+    date = as.Date(time),
+    time_of_day = format(as.POSIXct(time), "%H:%M:%S")
+  )
+```
+
+```{r}
+head(energy_merged_data)
+```
+```{r}
+energy_merged_data <- energy_merged_data %>%
+  select(-time)
+```
+
+```{r}
+head(energy_merged_data)
+```
+
+```{r}
+weather_directory <- "https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/"
+read_weather_file <- function(file_url) {
+  tryCatch({
+    message(paste("Attempting to read:", file_url))
+    
+    # Read the CSV file with explicit column types
+    weather_data <- read_csv(
+      file_url,
+      col_types = cols(
+        date_time = col_datetime(format = ""),
+        `Dry Bulb Temperature [°C]` = col_double(),
+        `Relative Humidity [%]` = col_double(),
+        `Wind Speed [m/s]` = col_double()
+      ),
+      show_col_types = FALSE
+    )
+    
+    # Extract county code from the file URL
+    county_code <- sub("\\.csv$", "", basename(file_url))
+    
+    # Rename columns for consistency
+    weather_data <- weather_data %>%
+      rename(
+        Dry.Bulb.Temperature = `Dry Bulb Temperature [°C]`,
+        Relative.Humidity = `Relative Humidity [%]`,
+        Wind.Speed = `Wind Speed [m/s]`
+      ) %>%
+      select(date_time, Dry.Bulb.Temperature, Relative.Humidity, Wind.Speed) %>%
+      mutate(county_code = county_code) %>%
+      filter(month(date_time) == 7) # Filter for July using lubridate's month() function
+    
+    message(paste("Successfully read:", file_url))
+    return(weather_data)
+  }, error = function(e) {
+    message(paste("Error processing file:", file_url, "Error:", e$message))
+    return(NULL)
+  })
+}
+```
+
+```{r}
+# Generate URLs for multiple counties
+counties <- c(
+  "G4500910", "G4500730", "G4500710", "G4500790", "G4500450", "G4500150", "G4500350",
+  "G4500190", "G4500830", "G4500510", "G4500070", "G4500670", "G4500750", "G4500290",
+  "G4500490", "G4500130", "G4500630", "G4500870", "G4500550", "G4500010", "G4500430",
+  "G4500890", "G4500850", "G4500770", "G4500030", "G4500590", "G4500610", "G4500250",
+  "G4500530", "G4500210", "G4500410", "G4500570", "G4500690", "G4500310", "G4500090",
+  "G4500470", "G4500050", "G4500330", "G4500650", "G4500230", "G4500270", "G4500370",
+  "G4500110", "G4500170", "G4500390", "G4500810"
+)
+weather_files <- paste0("https://intro-datascience.s3.us-east-2.amazonaws.com/SC-data/weather/2023-weather-data/", counties, ".csv")
+
+# Read and combine all weather files (filtered for July)
+merged_weather_data <- lapply(weather_files, read_weather_file) %>%
+  bind_rows()
+
+# Preview the combined dataset
+head(merged_weather_data)
+```
+```{r}
+# Extract the `date` and `time_of_day` columns from `date_time`
+merged_weather_data <- merged_weather_data %>%
+  mutate(
+    date = as.Date(date_time),  # Extract the date
+    time_of_day = format(as.POSIXct(date_time), "%H:%M:%S")  # Extract the time of day
+  )
+
+# Remove the original `date_time` column
+merged_weather_data <- merged_weather_data %>%
+  select(-date_time)
+
+# Display the updated weather data to verify changes
+head(merged_weather_data)
+```
+
+```{r}
+# Merge static data into energy data
+energy_with_static <- energy_merged_data %>%
+  left_join(static_data, by = "bldg_id") 
+
+head(energy_with_static)
+```
+```{r}
+# Merge datasets using both date and location as keys
+july_data <- energy_with_static %>%
+  left_join(
+    merged_weather_data,
+    by = c("date", "time_of_day", "in.county" = "county_code")
+  )
+head(july_data)
+```
+```{r}
+summary(july_data)
+```
+
+```{r}
+july_data <- july_data %>%
+  mutate(
+    # Compute total energy consumption
+    total_energy_consumption = rowSums(select(., starts_with("out.electricity.")), na.rm = TRUE)
+  )
+```
+
+```{r}
+summary(july_data)
+```
+```{r}
+nrow(july_data)
+```
+
+```{r}
+july_data <- july_data[july_data$total_energy_consumption >= 0, ]
+```
+
+```{r}
+nrow(july_data)
+```
+
+```{r}
+missing_values <- sapply(july_data, function(x) sum(is.na(x)))
+missing_values
+```
+
+```{r}
+library(zoo)
+# Interpolate missing values while preserving original structure
+july_data$Dry.Bulb.Temperature <- na.approx(
+  july_data$Dry.Bulb.Temperature,
+  na.rm = FALSE
+)
+
+july_data$Relative.Humidity <- na.approx(
+  july_data$Relative.Humidity,
+  na.rm = FALSE
+)
+
+july_data$Wind.Speed <- na.approx(
+  july_data$Wind.Speed,
+  na.rm = FALSE
+)
+
+# Forward fill for missing values at the start
+july_data$Dry.Bulb.Temperature <- na.locf(
+  july_data$Dry.Bulb.Temperature,
+  na.rm = FALSE
+)
+
+july_data$Relative.Humidity <- na.locf(
+  july_data$Relative.Humidity,
+  na.rm = FALSE
+)
+
+july_data$Wind.Speed <- na.locf(
+  july_data$Wind.Speed,
+  na.rm = FALSE
+)
+
+# Backward fill for missing values at the end
+july_data$Dry.Bulb.Temperature <- na.locf(
+  july_data$Dry.Bulb.Temperature,
+  fromLast = TRUE,
+  na.rm = FALSE
+)
+
+july_data$Relative.Humidity <- na.locf(
+  july_data$Relative.Humidity,
+  fromLast = TRUE,
+  na.rm = FALSE
+)
+
+july_data$Wind.Speed <- na.locf(
+  july_data$Wind.Speed,
+  fromLast = TRUE,
+  na.rm = FALSE
+)
+```
+```{r}
+missing_values <- sapply(july_data, function(x) sum(is.na(x)))
+missing_values
+```
+```{r}
+summary(july_data)
+```
+```{r}
+# Total Energy Consumption Over Time
+# Line plot for total energy consumption over time
+ggplot(data = july_data, aes(x = time_of_day, y = total_energy_consumption)) +
+  geom_line(color = "blue") +
+  labs(title = "Total Energy Consumption Over Time (July)",
+       x = "Time",
+       y = "Total Energy Consumption (kWh)") +
+  theme_minimal()
+```
+```{r}
+hist(july_data$total_energy_consumption, main = "Distribution of Total Energy Consumption", xlab = "Energy")
+hist(july_data$Dry.Bulb.Temperature, main = "Temperature Distribution", xlab = "Temperature")
+```
+```{r}
+plot(july_data$Dry.Bulb.Temperature, july_data$total_energy_consumption, 
+     main = "Energy vs Temperature", xlab = "Temperature", ylab = "Energy")
+plot(july_data$Relative.Humidity, july_data$total_energy_consumption, 
+     main = "Energy vs Humidity", xlab = "Humidity", ylab = "Energy")
+```
+
+```{r}
+# Energy Usage by Category
+library(tidyr)
+# Summarize average energy consumption by category
+average_usage <- july_data %>%
+  summarise(across(starts_with("out.electricity."), mean, na.rm = TRUE)) %>%
+  pivot_longer(cols = everything(), names_to = "Category", values_to = "Average_Usage")
+
+# Bar plot of average energy usage by category
+ggplot(average_usage, aes(x = reorder(Category, Average_Usage), y = Average_Usage)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Average Energy Consumption by Category (July)",
+       x = "Energy Category",
+       y = "Average Energy Consumption (kWh)") +
+  theme_minimal()
+```
+```{r}
+# Cooling vs. Heating Energy Usage
+# Line plot comparing cooling and heating energy usage
+ggplot(data = july_data, aes(x = time_of_day)) +
+  geom_line(aes(y = out.electricity.cooling.energy_consumption, color = "Cooling")) +
+  geom_line(aes(y = out.electricity.heating.energy_consumption, color = "Heating")) +
+  labs(title = "Cooling vs Heating Energy Usage Over Time (July)",
+       x = "Time",
+       y = "Energy Consumption (kWh)") +
+  scale_color_manual(values = c("Cooling" = "blue", "Heating" = "red")) +
+  theme_minimal()
+```
+```{r}
+class(july_data)
+```
+
+```{r}
+zero_variance_cols <- sapply(july_data, function(col) var(col, na.rm = TRUE) == 0)
+```
+```{r}
+july_data <- july_data[, !zero_variance_cols, with = FALSE]
+```
+
+```{r}
+numeric_cols <- sapply(july_data, is.numeric)
+correlation_matrix <- cor(july_data[, numeric_cols, with = FALSE], use = "pairwise.complete.obs")
+```
+
+```{r}
+# Define the range for correlation
+lower_bound <- 0.3
+upper_bound <- 0.8
+
+# Get the correlation values for the target variable
+cor_target <- correlation_matrix["total_energy_consumption", ]
+
+# Filter variables within the desired range
+selected_vars <- names(cor_target[cor_target >= lower_bound & cor_target <= upper_bound])
+
+# Check selected variables
+print(selected_vars)
+```
+```{r}
+new_july_data <- july_data %>%
+  select(out.electricity.clothes_dryer.energy_consumption,out.electricity.cooling_fans_pumps.energy_consumption
+, out.electricity.cooling.energy_consumption, out.electricity.lighting_exterior.energy_consumption,
+out.electricity.lighting_interior.energy_consumption, out.electricity.plug_loads.energy_consumption ,       
+out.electricity.range_oven.energy_consumption , in.sqft ,                                         
+Dry.Bulb.Temperature, time_of_day, in.county, total_energy_consumption)  # Replace with your desired column names
+
+# View the resulting dataset
+head(new_july_data)
+```
+
+```{r}
+class(new_july_data)
+```
+```{r}
+# Step 1: Sampling 1000 rows from new_july_data with replacement
+sampling_data <- new_july_data[sample(nrow(new_july_data), 1000, replace = TRUE), ]
+
+# Step 2: Create a new data frame with selected columns
+sampling_df <- data.frame(
+  clothes_dryer = sampling_data$out.electricity.clothes_dryer.energy_consumption,
+  cooling_fans_pumps = sampling_data$out.electricity.cooling_fans_pumps.energy_consumption,
+  cooling_energy = sampling_data$out.electricity.cooling.energy_consumption,
+  lighting_exterior = sampling_data$out.electricity.lighting_exterior.energy_consumption,
+  lighting_interior = sampling_data$out.electricity.lighting_interior.energy_consumption,
+  plug_loads = sampling_data$out.electricity.plug_loads.energy_consumption,
+  range_oven = sampling_data$out.electricity.range_oven.energy_consumption,
+  sqft = sampling_data$in.sqft,
+  temperature = sampling_data$Dry.Bulb.Temperature,
+  time = sampling_data$time_of_day,
+  total_energy_consumption = sampling_data$total_energy_consumption
+)
+```
+
+```{r}
+# Step 3: Add a new column for raised temperature (+5 degrees)
+sampling_df$raised_temperature <- sampling_df$temperature + 5
+
+# Step 4: Split the data into training and testing sets
+set.seed(123)  # Ensure reproducibility
+trainList <- createDataPartition(sampling_df$total_energy_consumption, p = 0.8, list = FALSE)
+
+# Create train and test datasets
+trainSet <- sampling_df[trainList, ]  # 80% training set
+testSet <- sampling_df[-trainList, ]
+```
+
+```{r}
+# Step 4: Train a Linear Regression model
+lm_model <- lm(total_energy_consumption ~ ., data = trainSet)
+
+# Step 5: Predict on the test set
+lm_predictions <- predict(lm_model, testSet)
+
+# Step 6: Evaluate the model
+actual <- testSet$total_energy_consumption
+predicted <- lm_predictions
+
+# Calculate RMSE and R-squared
+rmse <- sqrt(mean((actual - predicted)^2))
+r_squared <- 1 - (sum((actual - predicted)^2) / sum((actual - mean(actual))^2))
+
+# Print evaluation metrics
+cat("Linear Model Performance:\n")
+cat("RMSE:", rmse, "\n")
+cat("R-squared:", r_squared, "\n")
+```
+
+```{r}
+# Step 7: Visualize Actual vs Predicted
+library(ggplot2)
+results <- data.frame(Actual = actual, Predicted = predicted)
+
+ggplot(results, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Linear Model: Actual vs Predicted", x = "Actual Values", y = "Predicted Values") +
+  theme_minimal()
+```
+
+```{r}
+# Step 8: Predict with Raised Temperature
+testSet$raised_predictions <- predict(lm_model, newdata = mutate(testSet, temperature = raised_temperature))
+
+# Visualize Predicted Impact of Raised Temperature
+ggplot(data = testSet, aes(x = raised_temperature, y = raised_predictions)) +
+  geom_line(color = "purple") +
+  labs(title = "Predicted Energy Usage with Raised Temperature",
+       x = "Raised Temperature (°C)", y = "Predicted Energy Usage (kWh)") +
+  theme_minimal()
+```
+
+
+```{r}
+mae <- mean(abs(actual - predicted))
+mae
+```
+
+```{r}
+# Create the line chart directly using actual and predicted variables
+ggplot() +
+  geom_line(aes(x = seq_along(actual), y = actual, color = "Actual"), size = 1.2) +   # Line for actual values
+  geom_line(aes(x = seq_along(predicted), y = predicted, color = "Predicted"), size = 1.2) +  # Line for predicted values
+  labs(
+    title = "Actual vs Predicted Energy Usage",
+    x = "Observation Index",
+    y = "Energy Usage (kWh)"
+  ) +
+  scale_color_manual(values = c("Actual" = "green", "Predicted" = "purple")) +  # Customize colors
+  theme_minimal() +
+  theme(legend.title = element_blank())  # Remove legend title
+```
+
+```{r}
+library(randomForest)
+
+# Train a Random Forest model
+rf_model <- randomForest(
+  total_energy_consumption ~ ., 
+  data = trainSet, 
+  ntree = 100,                # Number of trees
+  importance = TRUE           # Calculate feature importance
+)
+
+# Predict on the test set
+rf_predictions <- predict(rf_model, testSet)
+
+# Evaluate the model
+rf_actual <- testSet$total_energy_consumption
+
+rf_rmse <- sqrt(mean((rf_actual - rf_predictions)^2))
+rf_r_squared <- 1 - (sum((rf_actual - rf_predictions)^2) / sum((rf_actual - mean(rf_actual))^2))
+rf_mae <- mean(abs(rf_actual - rf_predictions))
+
+# Print evaluation metrics
+cat("Random Forest Model Performance:\n")
+cat("RMSE:", rf_rmse, "\n")
+cat("R-squared:", rf_r_squared, "\n")
+cat("MAE:", rf_mae, "\n")
+
+```
+
+```{r}
+library(ggplot2)
+
+ggplot() +
+  geom_line(aes(x = seq_along(rf_actual), y = rf_actual, color = "Actual"), size = 1.2) +
+  geom_line(aes(x = seq_along(rf_predictions), y = rf_predictions, color = "Predicted"), size = 1.2) +
+  labs(
+    title = "Random Forest: Actual vs Predicted",
+    x = "Observation Index",
+    y = "Energy Usage (kWh)"
+  ) +
+  scale_color_manual(values = c("Actual" = "green", "Predicted" = "blue")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+```
+
+```{r}
+# Use new_july_data and aggregate energy demand by geographic region (in.county)
+region_demand <- new_july_data %>%
+  group_by(in.county) %>%
+  summarize(
+    Peak_Energy_Demand = max(total_energy_consumption, na.rm = TRUE)
+  )
+
+# Plot the graph
+ggplot(region_demand, aes(x = reorder(in.county, -Peak_Energy_Demand), y = Peak_Energy_Demand)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(
+    title = "Future Peak Energy Demand by Geographic Region",
+    x = "Geographic Region (County)",
+    y = "Peak Energy Demand (kWh)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+```
+
+```{r}
+# Create bins for square footage
+sampled_data_bins <- trainSet %>%
+  mutate(Sqft_Bin = cut(
+    sqft, 
+    breaks = c(0, 1000, 2000, 3000, 4000, 5000, Inf), 
+    labels = c("<1000", "1000-2000", "2000-3000", "3000-4000", "4000-5000", ">5000")
+  )) %>%
+  group_by(Sqft_Bin) %>%
+  summarize(
+    Peak_Energy_Demand = max(total_energy_consumption, na.rm = TRUE)
+  )
+
+# Plot the graph
+ggplot(sampled_data_bins, aes(x = Sqft_Bin, y = Peak_Energy_Demand)) +
+  geom_bar(stat = "identity", fill = "purple") +
+  labs(
+    title = "Future Peak Energy Demand by Square Footage",
+    x = "Square Footage Bin",
+    y = "Peak Energy Demand (kWh)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+write.csv(july_data, "~/Library/CloudStorage/OneDrive-SyracuseUniversity/SEM 1/Intro to DS/project/hope/july_data", row.names = FALSE)
+```
+
+```{r}
+write.csv(new_july_data, "~/Library/CloudStorage/OneDrive-SyracuseUniversity/SEM 1/Intro to DS/project/hope/new_july_data", row.names = FALSE)
+```
+
+```{r}
+saveRDS(july_data, "july_data.rds")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
