@@ -5,7 +5,6 @@ This project was developed to support **ESC**, an electricity provider in South 
 
 Our analysis combines **household attributes, hourly energy consumption, and weather data** to build predictive models, explore energy usage drivers, and propose actionable solutions.  
 
----
 
 ## 📊 Data Collection & Preparation  
 The project used **three major datasets**:  
@@ -19,7 +18,6 @@ The project used **three major datasets**:
 - Aggregating hourly energy usage into total consumption.  
 - Creating derived variables (e.g., sum of appliance energy loads, July-only subsets).  
 
----
 
 ## 🔎 Exploratory Analysis  
 Our exploratory data analysis (EDA) uncovered:  
@@ -28,7 +26,6 @@ Our exploratory data analysis (EDA) uncovered:
 - **Top Drivers** – Cooling systems, interior lighting, and plug loads had the strongest correlations with total energy.  
 - **Weather Links** – Energy consumption rose sharply with higher temperature and humidity levels.  
 
----
 
 ## 🧠 Modeling Approach  
 We implemented and compared multiple predictive models:  
@@ -50,7 +47,6 @@ We implemented and compared multiple predictive models:
 
 ✅ Across models, **SVM consistently delivered the best balance of accuracy and generalization**.   
 
----
 
 ## ⚡ Key Findings  
 - **Main Drivers of Consumption**: Cooling systems (setpoint & type), interior lighting, plug loads, ovens.  
@@ -59,7 +55,6 @@ We implemented and compared multiple predictive models:
 - **Overfitting Risks**: Decision tree models tended to overfit without feature selection.  
 - **Scenario Testing**: A +5°F simulation predicted significant future demand surges, emphasizing the need for proactive strategies.  
 
----
 
 ## 💡 Recommendations for ESC  
 1. **Smart Thermostat Incentives** – Encourage optimized cooling schedules.  
@@ -68,17 +63,12 @@ We implemented and compared multiple predictive models:
 4. **High-Consumption County Focus** – Pilot programs in hot-humid, high-demand regions.  
 5. **Customer Awareness Campaigns** – Promote sustainable cooling practices and plug load reduction.  
 
----
 
 ## 🛠 Deliverables  
 - Cleaned and merged multi-source dataset (static house, weather, and energy).  
 - **Predictive models (Linear Regression, Decision Tree, SVM, KSVM).**  
 - **Shiny App** – Interactive tool for decision-makers to explore predictions, visualize scenarios, and simulate interventions.  
 
-**Visualization Placeholder:**  
-![Shiny App Screenshot](/image.png)  
-
----
 
 ## 📌 Conclusion  
 This project demonstrates how **data science and machine learning** can drive real-world impact in **energy sustainability**. By identifying the strongest consumption drivers, testing predictive models, and providing targeted recommendations, we enable ESC to:  
@@ -87,7 +77,6 @@ This project demonstrates how **data science and machine learning** can drive re
 - Avoid costly blackouts.  
 - Advance environmental goals.  
 
----
 
 ## 🔑 Key Skills & Tools  
 - **Languages & Tools:** R, tidyverse, arrow, e1071, Shiny  
