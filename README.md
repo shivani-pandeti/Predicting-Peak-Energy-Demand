@@ -1,84 +1,61 @@
-# ⚡ Predicting Peak Energy Demand  
+# Predicting Peak Energy Demand
 
-## 📌 Project Overview  
-This project was developed to support **ESC**, an electricity provider in South Carolina and North Carolina, in understanding and managing **peak summer energy demand**. With rising global temperatures, ESC is concerned about its ability to meet customer cooling needs during July — the highest consumption month — without resorting to costly infrastructure investments.  
-
-Our analysis combines **household attributes, hourly energy consumption, and weather data** to build predictive models, explore energy usage drivers, and propose actionable solutions.  
+## 📌 Project Overview
+This project analyzes **residential peak electricity demand during July**, the highest grid-stress month, for an electricity provider in South Carolina and North Carolina. The objective is to **predict peak demand**, identify key consumption drivers, and propose **cost-effective demand reduction strategies** without expanding infrastructure.
 
 
-## 📊 Data Collection & Preparation  
-The project used **three major datasets**:  
-1. **Static House Data** – 5,710 houses with 171 attributes (size, appliances, construction, systems, etc.).  
-2. **Energy Usage Data** – 50M+ hourly records of electricity and appliance-level consumption.  
-3. **Weather Data** – 400K+ hourly observations of temperature, humidity, and solar radiation.  
+## 📊 Data Collection & Preparation
+The analysis integrates three datasets:
+- **Static House Data**: 5,710 homes with structural, appliance, and system attributes
+- **Energy Usage Data**: 50M+ hourly appliance-level electricity consumption records
+- **Weather Data**: 400K+ hourly observations of temperature, humidity, and solar radiation
 
-⚡ **Challenge:** The datasets were extremely large and complex, requiring careful handling. While some projects opted for cloud storage, I processed and merged all three datasets **locally on a Mac system** without crashes. This included:  
-- Cleaning and filtering noisy or constant-value variables.  
-- Handling missing values.  
-- Aggregating hourly energy usage into total consumption.  
-- Creating derived variables (e.g., sum of appliance energy loads, July-only subsets).  
+Data was cleaned, merged, and processed locally. Appliance-level energy usage was aggregated into a single target variable: **total energy consumption**. Analysis was limited to **July hourly data** to capture peak demand behavior.
 
 
-## 🔎 Exploratory Analysis  
-Our exploratory data analysis (EDA) uncovered:  
-- **Peak Hours** – Highest usage between **8–9 PM**.  
-- **Climate Sensitivity** – Hot-humid counties consistently consumed more than mixed-humid counties.  
-- **Top Drivers** – Cooling systems, interior lighting, and plug loads had the strongest correlations with total energy.  
-- **Weather Links** – Energy consumption rose sharply with higher temperature and humidity levels.  
+## 🔎 Exploratory Analysis
+Key insights from EDA:
+- Peak demand occurs between **8–9 PM**
+- Hot-humid counties consume significantly more energy
+- **Cooling systems, interior lighting, and plug loads** are the strongest demand drivers
+- Energy usage increases sharply with higher temperature and humidity
 
 
-## 🧠 Modeling Approach  
-We implemented and compared multiple predictive models:  
+## 🧠 Modeling Approach
+Multiple models were evaluated to predict July peak demand:
 
-### 1. Linear Regression  
-- Initial model with a few predictors (cooling & lighting loads).  
-- R² ≈ 0.62 → improved to **0.77** with more correlated variables.  
-- RMSE ≈ 0.35, MAPE ≈ 12%.  
+- **Linear Regression**: R² ≈ 0.77  
+- **Decision Tree**: R² ≈ 0.70 (overfitting risk)  
+- **Kernel SVM**: R² ≈ 0.73  
+- **Support Vector Machine (SVM)**: **R² ≈ 0.81 (Best Model)**
 
-### 2. Decision Tree  
-- Captured non-linear relationships better than regression.  
-- R² ≈ 0.70 on full dataset.  
-- Prone to overfitting when too many predictors included.  
-
-### 3. Support Vector Machine (SVM)  
-- **Best performing model.**  
-- R² ≈ **0.81**, RMSE ≈ 0.35, MAE ≈ 0.13.  
-- Strong predictive power for July peak consumption across counties.    
-
-✅ Across models, **SVM consistently delivered the best balance of accuracy and generalization**.   
+The **SVM model** provided the best balance of accuracy and generalization.
 
 
-## ⚡ Key Findings  
-- **Main Drivers of Consumption**: Cooling systems (setpoint & type), interior lighting, plug loads, ovens.  
-- **Weather Factors**: Strong positive correlation between consumption, temperature, and humidity.  
-- **Peak Demand Timing**: Usage spiked in evenings (20:00–21:00).  
-- **Overfitting Risks**: Decision tree models tended to overfit without feature selection.  
-- **Scenario Testing**: A +5°F simulation predicted significant future demand surges, emphasizing the need for proactive strategies.  
+## ⚡ Key Findings 
+- Cooling-related loads dominate peak demand
+- Evening hours drive the highest grid stress
+- Decision trees overfit without feature selection
+- Scenario testing (+5°F) indicates significant future demand growth
 
 
-## 💡 Recommendations for ESC  
-1. **Smart Thermostat Incentives** – Encourage optimized cooling schedules.  
-2. **LED Lighting Rebates** – Replace high-consumption bulbs with energy-efficient LEDs.  
-3. **HVAC Upgrades** – Support upgrades to energy-efficient cooling systems.  
-4. **High-Consumption County Focus** – Pilot programs in hot-humid, high-demand regions.  
-5. **Customer Awareness Campaigns** – Promote sustainable cooling practices and plug load reduction.  
+## 📈 Visualization Placeholder:
+![Shiny App Screenshot](/image.png)  
 
 
-## 🛠 Deliverables  
-- Cleaned and merged multi-source dataset (static house, weather, and energy).  
-- **Predictive models (Linear Regression, Decision Tree, SVM, KSVM).**  
-- **Shiny App** – Interactive tool for decision-makers to explore predictions, visualize scenarios, and simulate interventions.  
+## 💡 Recommendations
+- Smart thermostat incentive programs
+- LED lighting rebates
+- HVAC efficiency upgrades
+- Targeted programs in high-consumption counties
+- Customer awareness campaigns for load reduction
 
 
-## 📌 Conclusion  
-This project demonstrates how **data science and machine learning** can drive real-world impact in **energy sustainability**. By identifying the strongest consumption drivers, testing predictive models, and providing targeted recommendations, we enable ESC to:  
-- Reduce peak demand sustainably.  
-- Improve grid reliability.  
-- Avoid costly blackouts.  
-- Advance environmental goals.  
+## 🛠 Tools & Technologies
+- **Language**: R  
+- **Libraries**: tidyverse, arrow, e1071, Shiny  
+- **Techniques**: Data Wrangling, EDA, Feature Selection, Regression, SVM
 
 
-## 🔑 Key Skills & Tools  
-- **Languages & Tools:** R, tidyverse, arrow, e1071, Shiny  
-- **Techniques:** Data Wrangling, EDA, Correlation Analysis, Regression, Decision Trees, SVM
-- **Domains:** Energy Analytics, Forecasting, Climate Impact, Sustainability  
+## 📌 Conclusion
+This project demonstrates how **data science and machine learning** can help utilities manage peak electricity demand, improve grid reliability, and reduce blackout risk in a warming climate.
